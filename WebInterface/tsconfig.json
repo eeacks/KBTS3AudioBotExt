@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "target": "es6",
+        "module": "es2015",
+        "moduleResolution": "node",
+        "sourceMap": true,
+        "rootDir": "src/ts",
+
+        "removeComments": true,
+        "noImplicitAny": false,
+        "strictNullChecks": false,
+        "alwaysStrict": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitReturns": false,
+        "noImplicitThis": false,
+        //"noUnusedLocals": true,
+        //,"noUnusedParameters": true
+        "strictPropertyInitialization": false,
+        "strictFunctionTypes": false,
+        "strict": false,
+
+        "jsx": "react",
+        "jsxFactory": "createElement"
+    }
+}
+ 

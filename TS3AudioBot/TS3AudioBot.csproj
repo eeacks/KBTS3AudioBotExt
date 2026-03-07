@@ -1,0 +1,110 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TS3AudioBot</RootNamespace>
+    <AssemblyName>TS3AudioBot</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <LangVersion>8.0</LangVersion>
+    <TargetFramework>net6.0</TargetFramework>
+    <TargetLatestRuntimePatch>true</TargetLatestRuntimePatch>
+    <RollForward>Major</RollForward>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <DebugType>portable</DebugType>
+    <ApplicationIcon>Media\favicon.ico</ApplicationIcon>
+    <NeutralLanguage>en</NeutralLanguage>
+    <StartupObject>TS3AudioBot.Setup</StartupObject>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <RepositoryUrl>https://github.com/scheissegalo/KBTS3AudioBot.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
+    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="NLog.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="CliWrap" Version="3.1.0" />
+    <PackageReference Include="CommandLineParser" Version="2.8.0" />
+    <PackageReference Include="NLog" Version="4.7.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="LiteDB" Version="5.0.17" />
+    <PackageReference Include="Microsoft.AspNetCore.Cors" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.StaticFiles" Version="2.2.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="3.7.0">
+      <ExcludeAssets>analyzers</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Nett" Version="0.15.0" />
+    <PackageReference Include="PlaylistsNET" Version="1.1.2" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
+    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.117" />
+    <TrimmerRootAssembly Include="System.Text.Json" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\DefaultRights.toml" />
+    <EmbeddedResource Include="Media\SleepingKitty.png" />
+    <EmbeddedResource Include="Resources\NLog.config">
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="lib\x64\libopus.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <PackagePath>.</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="lib\x86\libopus.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <PackagePath>.</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="NLog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TSLib\TSLib.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Localization\strings.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>strings.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Localization\strings.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>strings.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <Target Name="GenerateBuildVersion" BeforeTargets="BeforeCompile">
+    <ItemGroup>
+      <VersionBuildScript Include="build.csx" />
+      <VersionBuildOutputFile Include="$(IntermediateOutputPath)Version.g.cs" />
+    </ItemGroup>
+    <Exec Command="dotnet script @(VersionBuildScript) -- @(VersionBuildOutputFile) $(Configuration)" />
+    <ItemGroup>
+      <FileWrites Include="@(VersionBuildOutputFile)" />
+      <Compile Include="@(VersionBuildOutputFile)">
+        <AutoGen>True</AutoGen>
+      </Compile>
+    </ItemGroup>
+  </Target>
+  
+</Project>
