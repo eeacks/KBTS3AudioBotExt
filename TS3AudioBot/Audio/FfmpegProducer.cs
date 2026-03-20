@@ -8,6 +8,7 @@
 // program. If not, see <https://opensource.org/licenses/OSL-3.0>.
 
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -59,9 +60,9 @@ namespace TS3AudioBot.Audio
 			this.id = id;
 		}
 
-		public Task AudioStart(string url, TimeSpan? startOff = null)
+		public Task AudioStart(string url, TimeSpan? startOff = null, IDictionary<string, string>? requestHeaders = null)
 		{
-			StartFfmpegProcess(url, startOff ?? TimeSpan.Zero);
+			StartFfmpegProcess(url, startOff ?? TimeSpan.Zero, requestHeaders);
 			return Task.CompletedTask;
 		}
 
@@ -111,6 +112,8 @@ namespace TS3AudioBot.Audio
 				if (instance.FfmpegProcess.HasExitedSafe())
 				{
 					Log.Trace("Ffmpeg has exited");
+					// Early-exit diagnostics were added for bilibili investigation.
+					// Commented out because the extra warning is no longer needed.
 					
 					// Log playback completion status for HLS streams
 					if (instance.IsHlsPlayback)
@@ -253,10 +256,10 @@ namespace TS3AudioBot.Audio
 			var lastLink = instance.ReconnectUrl;
 			if (lastLink is null)
 				return "No current url active";
-			return StartFfmpegProcess(lastLink, value);
+			return StartFfmpegProcess(lastLink, value, instance.RequestHeaders);
 		}
 
-		private R<FfmpegInstance, string> StartFfmpegProcess(string url, TimeSpan? offsetOpt)
+		private R<FfmpegInstance, string> StartFfmpegProcess(string url, TimeSpan? offsetOpt, IDictionary<string, string>? requestHeaders = null)
 		{
 			StopFfmpegProcess();
 			Log.Trace("Start request {0}", url);
@@ -270,19 +273,20 @@ namespace TS3AudioBot.Audio
 			if (isHls)
 			{
 				Log.Info("HLS URL detected, using sequential processing flags");
-				arguments = BuildHlsArguments(url, offset);
+				arguments = BuildHlsArguments(url, offset, requestHeaders);
 			}
 			else
 			{
 				Log.Debug("Non-HLS URL, using standard arguments");
+				var headerArgs = BuildHeaderArguments(requestHeaders);
 				if (offset > TimeSpan.Zero)
 				{
 					var seek = string.Format(CultureInfo.InvariantCulture, @"-ss {0:hh\:mm\:ss\.fff}", offset);
-					arguments = string.Concat(seek, " ", PreLinkConf, url, PostLinkConf, " ", seek);
+					arguments = string.Concat(seek, " ", headerArgs, PreLinkConf, url, PostLinkConf, " ", seek);
 				}
 				else
 				{
-					arguments = string.Concat(PreLinkConf, url, PostLinkConf);
+					arguments = string.Concat(headerArgs, PreLinkConf, url, PostLinkConf);
 				}
 			}
 
@@ -293,7 +297,8 @@ namespace TS3AudioBot.Audio
 					SongPositionOffset = offset,
 				})
 			{
-				IsHlsPlayback = isHls
+				IsHlsPlayback = isHls,
+				RequestHeaders = requestHeaders
 			};
 
 			return StartFfmpegProcessInternal(newInstance, arguments);
@@ -417,7 +422,7 @@ namespace TS3AudioBot.Audio
 			return isHls;
 		}
 
-		private static string BuildHlsArguments(string url, TimeSpan offset)
+		private static string BuildHlsArguments(string url, TimeSpan offset, IDictionary<string, string>? requestHeaders)
 		{
 			var sb = new System.Text.StringBuilder();
 
@@ -436,19 +441,12 @@ namespace TS3AudioBot.Audio
 			sb.Append("-multiple_requests 0 ");     // Disable parallel requests
 			sb.Append("-fflags +discardcorrupt ");  // Discard corrupt packets
 			
-			// Add HTTP headers to prevent 403 Forbidden errors from YouTube
-			// YouTube requires proper User-Agent and Referer headers to access HLS segments
-			// These headers mimic a browser request to avoid bot detection
-			// FFmpeg expects headers in format: "Header1: value1\r\nHeader2: value2\r\n"
-			// We need to escape quotes in the header value for the command line
-			var userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-			var referer = "https://www.youtube.com/";
-			// Build header string with \r\n line breaks
-			var headerValue = $"User-Agent: {userAgent}\r\nReferer: {referer}\r\n";
-			// Escape quotes for command line (FFmpeg needs the header value in quotes)
-			var escapedHeaderValue = headerValue.Replace("\"", "\\\"");
-			sb.Append("-headers \"").Append(escapedHeaderValue).Append("\" ");
-			Log.Debug("Added HTTP headers for YouTube HLS access (User-Agent and Referer)");
+			var effectiveHeaders = requestHeaders ?? new Dictionary<string, string>
+			{
+				["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+				["Referer"] = "https://www.youtube.com/",
+			};
+			sb.Append(BuildHeaderArguments(effectiveHeaders));
 			
 			// Add cookies if configured - YouTube requires cookies for HLS segment access
 			// FFmpeg uses Netscape cookie file format (same as yt-dlp)
@@ -509,6 +507,32 @@ namespace TS3AudioBot.Audio
 			Log.Info("Built FFmpeg HLS command: ffmpeg {0}", arguments);
 
 			return arguments;
+		}
+
+		private static string BuildHeaderArguments(IDictionary<string, string>? requestHeaders)
+		{
+			if (requestHeaders is null || requestHeaders.Count == 0)
+			{
+				return string.Empty;
+			}
+
+			var headerBuilder = new System.Text.StringBuilder();
+			foreach (var header in requestHeaders)
+			{
+				if (string.IsNullOrWhiteSpace(header.Key) || string.IsNullOrWhiteSpace(header.Value))
+					continue;
+
+				headerBuilder.Append(header.Key).Append(": ").Append(header.Value).Append("\r\n");
+			}
+
+			if (headerBuilder.Length == 0)
+			{
+				return string.Empty;
+			}
+
+			var escapedHeaderValue = headerBuilder.ToString().Replace("\"", "\\\"");
+			Log.Debug("Passing request headers to ffmpeg: {0}", string.Join(", ", requestHeaders.Keys));
+			return "-headers \"" + escapedHeaderValue + "\" ";
 		}
 
 		private static string GetCustomHlsOptions()
@@ -659,6 +683,8 @@ namespace TS3AudioBot.Audio
 			public TimeSpan LastReportedPosition { get; set; } = TimeSpan.Zero;
 			public bool IsHlsPlayback { get; set; }
 			public bool HasDetectedPositionJump { get; set; }
+			public IDictionary<string, string>? RequestHeaders { get; set; }
+			// public string? LastErrorLine { get; set; }
 
 			public FfmpegInstance(string url, PreciseAudioTimer timer) : this(url, timer, null!, 0) { }
 			public FfmpegInstance(string url, PreciseAudioTimer timer, Stream icyStream, int icyMetaInt)
@@ -697,6 +723,9 @@ namespace TS3AudioBot.Audio
 
 				if (sender != FfmpegProcess)
 					throw new InvalidOperationException("Wrong process associated to event");
+
+				// LastErrorLine = e.Data;
+				// Log.Debug("ffmpeg stderr: {0}", e.Data);
 
 				if (ParsedSongLength is null)
 				{

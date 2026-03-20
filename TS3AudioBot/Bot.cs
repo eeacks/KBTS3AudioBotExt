@@ -402,6 +402,13 @@ namespace TS3AudioBot
 			}
 
 			var result = await ts3FullClient.ChangeDescription(setString ?? "");
+			if (!result.Ok
+				&& result.Error.Id == TsErrorCode.permissions_client_insufficient
+				&& result.Error.MissingPermissionId == TsPermission.b_client_modify_own_description)
+			{
+				Log.Debug("Skipping bot status description update because the server denies b_client_modify_own_description.");
+				return;
+			}
 			result.UnwrapToLog(Log);
 		}
 

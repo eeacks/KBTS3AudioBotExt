@@ -39,6 +39,7 @@ namespace TS3AudioBot.ResourceFactories
 			AddResolver(new TwitchResolver());
 			AddResolver(new BandcampResolver());
 			AddResolver(new BilibiliResolver());
+			AddResolver(new NetEaseMusicResolver());
 		}
 
 		private T? GetResolverByType<T>(string audioType) where T : class, IResolver =>

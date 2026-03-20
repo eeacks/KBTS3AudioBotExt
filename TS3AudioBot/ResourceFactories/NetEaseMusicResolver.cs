@@ -15,15 +15,15 @@ using TS3AudioBot.Localization;
 
 namespace TS3AudioBot.ResourceFactories
 {
-	public sealed class BilibiliResolver : IResourceResolver
+	public sealed class NetEaseMusicResolver : IResourceResolver
 	{
 		private static readonly NLog.Logger Log = NLog.LogManager.GetCurrentClassLogger();
 		private static readonly Regex LinkMatch = new Regex(
-			@"^(https?\:\/\/)?((www\.|m\.|live\.)?bilibili\.com|b23\.tv)",
+			@"^(https?\:\/\/)?((music|y)\.)?163\.com",
 			Util.DefaultRegexConfig);
 		private readonly string tempDownloadDir = Path.Combine(Path.GetTempPath(), "ts3audiobot_ytdl");
 
-		public string ResolverFor => "bilibili";
+		public string ResolverFor => "netease";
 
 		public MatchCertainty MatchResource(ResolveContext _, string uri)
 			=> LinkMatch.IsMatch(uri) ? MatchCertainty.Always : MatchCertainty.Never;
@@ -33,42 +33,29 @@ namespace TS3AudioBot.ResourceFactories
 
 		public async Task<PlayResource> GetResourceById(ResolveContext _, AudioResource resource)
 		{
-			Log.Debug("Using yt-dlp for bilibili resource: {0}", resource.ResourceId);
-			var isLive = IsLiveBilibiliUrl(resource.ResourceId);
+			Log.Debug("Using yt-dlp for netease music resource: {0}", resource.ResourceId);
 
 			var response = await YoutubeDlHelper.GetSingleVideo(resource.ResourceId);
-			resource.ResourceTitle = response.AutoTitle ?? $"Bilibili-{resource.ResourceId}";
+			resource.ResourceTitle = response.AutoTitle ?? $"NetEase-{resource.ResourceId}";
 
 			var songInfo = YoutubeDlHelper.MapToSongInfo(response);
 			var format = YoutubeDlHelper.FilterBestEnhanced(response.formats);
 			var url = format?.url;
 
-			// Debug inspection for all bilibili candidate formats was here.
-			// Commented out because playback appears fixed and the extra logging is no longer needed.
-
 			if (string.IsNullOrWhiteSpace(url))
 			{
-				Log.Warn("No suitable bilibili stream URL found for {0}. Falling back to direct download.", resource.ResourceId);
+				Log.Warn("No suitable netease stream URL found for {0}. Falling back to direct download.", resource.ResourceId);
 				return await DownloadFallback(resource, songInfo);
 			}
 
-			Log.Info("Selected bilibili format for {0}: format_id={1}, codec={2}",
+			Log.Info("Selected netease format for {0}: format_id={1}, codec={2}",
 				resource.ResourceId,
 				format?.format_id ?? "unknown",
 				format?.acodec ?? "unknown");
 
 			if (YoutubeDlHelper.IsHlsManifest(url))
 			{
-				if (isLive)
-				{
-					Log.Info("Selected bilibili live HLS manifest for {0}; ffmpeg will decode audio only.", resource.ResourceId);
-					return new PlayResource(url, resource, songInfo: songInfo)
-					{
-						RequestHeaders = format?.http_headers
-					};
-				}
-
-				Log.Warn("Selected bilibili format for {0} is an HLS manifest. Falling back to direct download for reliability.", resource.ResourceId);
+				Log.Warn("Selected netease format for {0} is an HLS manifest. Falling back to direct download for reliability.", resource.ResourceId);
 				return await DownloadFallback(resource, songInfo);
 			}
 
@@ -83,11 +70,11 @@ namespace TS3AudioBot.ResourceFactories
 			var downloadResult = await YoutubeDlHelper.DownloadVideo(resource.ResourceId, tempDownloadDir);
 			if (!downloadResult.Ok)
 			{
-				Log.Error("Bilibili direct download fallback failed for {0}: {1}", resource.ResourceId, downloadResult.Error);
+				Log.Error("NetEase direct download fallback failed for {0}: {1}", resource.ResourceId, downloadResult.Error);
 				throw Error.LocalStr(downloadResult.Error);
 			}
 
-			Log.Info("Bilibili direct download fallback succeeded for {0}: {1}", resource.ResourceId, downloadResult.Value);
+			Log.Info("NetEase direct download fallback succeeded for {0}: {1}", resource.ResourceId, downloadResult.Value);
 			return new PlayResource(downloadResult.Value, resource, songInfo: songInfo)
 			{
 				IsTemporaryFile = true,
@@ -96,9 +83,6 @@ namespace TS3AudioBot.ResourceFactories
 		}
 
 		public string RestoreLink(ResolveContext _, AudioResource resource) => resource.ResourceId;
-
-		private static bool IsLiveBilibiliUrl(string url)
-			=> url.Contains("live.bilibili.com");
 
 		public void Dispose() { }
 	}

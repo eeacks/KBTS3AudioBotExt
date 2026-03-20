@@ -451,9 +451,11 @@ namespace TS3AudioBot.ResourceFactories
 					Directory.CreateDirectory(tempDir);
 				}
 
-				// Generate temp file path with unique GUID to prevent collisions
-				var tempFile = Path.Combine(tempDir, $"ytdl_{id}_{Guid.NewGuid()}.m4a");
-				Log.Info("Downloading video {0} to {1}", id, tempFile);
+				// Generate a cross-platform-safe temp file template.
+				// We cannot embed the raw URL/id because it may contain invalid filename characters.
+				var tempFileBase = Path.Combine(tempDir, $"ytdl_{Guid.NewGuid():N}");
+				var tempFileTemplate = tempFileBase + ".%(ext)s";
+				Log.Info("Downloading video {0} to {1}", id, tempFileTemplate);
 
 				// Build download arguments
 				var args = new StringBuilder();
@@ -493,7 +495,7 @@ namespace TS3AudioBot.ResourceFactories
 
 				// Download best audio format
 				args.Append(" -f bestaudio");
-				args.Append($" -o \"{tempFile}\"");
+				args.Append($" -o \"{tempFileTemplate}\"");
 				args.Append($" -- {id}");
 
 				var fullArgs = args.ToString();
@@ -518,7 +520,9 @@ namespace TS3AudioBot.ResourceFactories
 					if (!string.IsNullOrEmpty(nodeDir))
 					{
 						var currentPath = System.Environment.GetEnvironmentVariable("PATH") ?? "";
-						var newPath = $"{nodeDir}:{currentPath}";
+						var newPath = string.IsNullOrEmpty(currentPath)
+							? nodeDir
+							: $"{nodeDir}{Path.PathSeparator}{currentPath}";
 						process.StartInfo.EnvironmentVariables["PATH"] = newPath;
 						Log.Debug("Added Node.js directory to PATH for yt-dlp download: {0}", nodeDir);
 					}
@@ -564,18 +568,23 @@ namespace TS3AudioBot.ResourceFactories
 					return R<string, string>.Err("Download failed: " + error);
 				}
 
-				// Verify downloaded file exists
-				if (!File.Exists(tempFile))
+				// yt-dlp chooses the final extension. Find the produced file from the template base name.
+				var downloadedFile = Directory
+					.GetFiles(tempDir, Path.GetFileName(tempFileBase) + ".*", SearchOption.TopDirectoryOnly)
+					.OrderByDescending(File.GetLastWriteTimeUtc)
+					.FirstOrDefault();
+
+				if (string.IsNullOrEmpty(downloadedFile) || !File.Exists(downloadedFile))
 				{
-					Log.Error("Downloaded file not found at expected location: {0}", tempFile);
+					Log.Error("Downloaded file not found for template base: {0}", tempFileBase);
 					return R<string, string>.Err("Downloaded file not found");
 				}
 
-				var fileInfo = new FileInfo(tempFile);
+				var fileInfo = new FileInfo(downloadedFile);
 				Log.Info("Successfully downloaded video {0} to {1} ({2} bytes)", 
-					id, tempFile, fileInfo.Length);
+					id, downloadedFile, fileInfo.Length);
 
-				return R<string, string>.OkR(tempFile);
+				return R<string, string>.OkR(downloadedFile);
 			}
 			catch (Exception ex)
 			{
@@ -657,7 +666,9 @@ namespace TS3AudioBot.ResourceFactories
 					if (!string.IsNullOrEmpty(nodeDir))
 					{
 						var currentPath = System.Environment.GetEnvironmentVariable("PATH") ?? "";
-						var newPath = $"{nodeDir}:{currentPath}";
+						var newPath = string.IsNullOrEmpty(currentPath)
+							? nodeDir
+							: $"{nodeDir}{Path.PathSeparator}{currentPath}";
 						tmproc.StartInfo.EnvironmentVariables["PATH"] = newPath;
 						Log.Debug("Added Node.js directory to PATH for yt-dlp: {0}", nodeDir);
 					}
@@ -1102,7 +1113,7 @@ namespace TS3AudioBot.ResourceFactories
 		public float? asr { get; set; }
 		/// <summary>totalBitRate</summary>
 		public float? tbr { get; set; }
-		//public object http_headers { get; set; }
+		public Dictionary<string, string>? http_headers { get; set; }
 		public string? format { get; set; }
 		public string? format_id { get; set; }
 		public string? url { get; set; }

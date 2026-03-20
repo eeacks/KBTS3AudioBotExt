@@ -24,6 +24,7 @@ namespace TS3AudioBot.ResourceFactories
 		private static readonly NLog.Logger Log = NLog.LogManager.GetCurrentClassLogger();
 		private static readonly Regex SoundcloudLink = new Regex(@"^https?\:\/\/(www\.)?soundcloud\.", Util.DefaultRegexConfig);
 		private const string SoundcloudClientId = "a9dd3403f858e105d7e266edc162a0c5";
+		private readonly string tempDownloadDir = Path.Combine(Path.GetTempPath(), "ts3audiobot_ytdl");
 
 		private const string AddArtist = "artist";
 		private const string AddTrack = "track";
@@ -36,6 +37,18 @@ namespace TS3AudioBot.ResourceFactories
 
 		public async Task<PlayResource> GetResource(ResolveContext? _, string uri)
 		{
+			if (SoundcloudLink.IsMatch(uri))
+			{
+				try
+				{
+					return await YoutubeDlWrappedAsync(uri);
+				}
+				catch (Exception ex)
+				{
+					Log.Debug(ex, "yt-dlp soundcloud resolve failed, falling back to legacy api path");
+				}
+			}
+
 			JsonTrackInfo? track = null;
 			try
 			{
@@ -106,19 +119,70 @@ namespace TS3AudioBot.ResourceFactories
 
 		private async Task<PlayResource> YoutubeDlWrappedAsync(string link)
 		{
-			Log.Debug("Falling back to youtube-dl!");
+			Log.Debug("Falling back to yt-dlp for soundcloud resource: {0}", link);
 
 			var response = await YoutubeDlHelper.GetSingleVideo(link);
 			var title = response.title ?? $"Soundcloud-{link}";
-			var format = YoutubeDlHelper.FilterBest(response.formats);
+			var songInfo = YoutubeDlHelper.MapToSongInfo(response);
+
+			// Prefer direct download for soundcloud because the extracted stream URL can expire
+			// or reject ffmpeg even though yt-dlp itself can access it.
+			var downloadResult = await YoutubeDlHelper.DownloadVideo(link, tempDownloadDir);
+			if (downloadResult.Ok)
+			{
+				Log.Info("Soundcloud direct download succeeded for {0}: {1}", link, downloadResult.Value);
+				return new PlayResource(downloadResult.Value, new AudioResource(link, title, ResolverFor), songInfo: songInfo)
+				{
+					IsTemporaryFile = true,
+					TemporaryFilePath = downloadResult.Value
+				};
+			}
+
+			Log.Warn("Soundcloud direct download failed for {0}: {1}. Falling back to streaming URL.", link, downloadResult.Error);
+
+			var format = YoutubeDlHelper.FilterBestEnhanced(response.formats);
 			var url = format?.url;
 
-			if (string.IsNullOrEmpty(url))
-				throw Error.LocalStr(strings.error_ytdl_empty_response);
+			if (string.IsNullOrWhiteSpace(url))
+			{
+				Log.Warn("No suitable soundcloud stream URL found for {0}. Falling back to direct download.", link);
+				return await DownloadFallback(link, title, songInfo);
+			}
 
-			Log.Debug("youtube-dl succeeded!");
+			Log.Info("Selected soundcloud format for {0}: format_id={1}, codec={2}",
+				link,
+				format?.format_id ?? "unknown",
+				format?.acodec ?? "unknown");
 
-			return new PlayResource(url, new AudioResource(link, title, ResolverFor));
+			if (YoutubeDlHelper.IsHlsManifest(url))
+			{
+				Log.Warn("Selected soundcloud format for {0} is an HLS manifest. Falling back to direct download for reliability.", link);
+				return await DownloadFallback(link, title, songInfo);
+			}
+
+			Log.Debug("yt-dlp succeeded for soundcloud");
+
+			return new PlayResource(url, new AudioResource(link, title, ResolverFor), songInfo: songInfo)
+			{
+				RequestHeaders = format?.http_headers
+			};
+		}
+
+		private async Task<PlayResource> DownloadFallback(string link, string title, SongInfo songInfo)
+		{
+			var downloadResult = await YoutubeDlHelper.DownloadVideo(link, tempDownloadDir);
+			if (!downloadResult.Ok)
+			{
+				Log.Error("Soundcloud direct download fallback failed for {0}: {1}", link, downloadResult.Error);
+				throw Error.LocalStr(downloadResult.Error);
+			}
+
+			Log.Info("Soundcloud direct download fallback succeeded for {0}: {1}", link, downloadResult.Value);
+			return new PlayResource(downloadResult.Value, new AudioResource(link, title, ResolverFor), songInfo: songInfo)
+			{
+				IsTemporaryFile = true,
+				TemporaryFilePath = downloadResult.Value
+			};
 		}
 
 		public async Task<Playlist> GetPlaylist(ResolveContext _, string url)

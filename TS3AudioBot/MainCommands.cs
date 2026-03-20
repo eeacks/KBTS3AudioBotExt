@@ -621,6 +621,14 @@ namespace TS3AudioBot
 			return str;
 		}
 
+		[Command("domains")]
+		public static string CommandDomains()
+			=> "[b]You can play media like this:[/b]\n"
+			+ "[code]!play \"https://www.bilibili.com\"[/code]\n"
+			+ "[code]!play \"https://live.bilibili.com\"[/code]\n"
+			+ "[code]!play \"https://music.163.com\"[/code]\n"
+			+ "[code]!play \"https://soundcloud.com\"[/code]";
+
 		[Command("history add")]
 		public static async Task CommandHistoryQueue(HistoryManager historyManager, PlayManager playManager, InvokerData invoker, uint hid)
 		{

@@ -69,7 +69,7 @@ namespace TS3AudioBot.Audio
 			if (res is MediaPlayResource mres && mres.IsIcyStream)
 				await FfmpegProducer.AudioStartIcy(res.PlayUri);
 			else
-				await FfmpegProducer.AudioStart(res.PlayUri, res.PlayInfo?.StartOffset);
+				await FfmpegProducer.AudioStart(res.PlayUri, res.PlayInfo?.StartOffset, res.RequestHeaders);
 			Play(FfmpegProducer);
 		}
 

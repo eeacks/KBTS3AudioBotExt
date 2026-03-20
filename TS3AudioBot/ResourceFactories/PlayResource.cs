@@ -8,6 +8,7 @@
 // program. If not, see <https://opensource.org/licenses/OSL-3.0>.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using NLog;
 using TS3AudioBot.Audio;
@@ -23,6 +24,7 @@ namespace TS3AudioBot.ResourceFactories
 		public string PlayUri { get; }
 		public PlayInfo? PlayInfo { get; set; }
 		public SongInfo? SongInfo { get; set; }
+		public IDictionary<string, string>? RequestHeaders { get; set; }
 
 		/// <summary>
 		/// Indicates whether this PlayResource uses a temporary file that should be cleaned up after playback.

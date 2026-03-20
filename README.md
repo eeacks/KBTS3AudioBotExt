@@ -2,6 +2,13 @@
 
 This is a open-source TeamSpeak3 bot, playing music and much more.
 
+This is a hard fork of https://github.com/scheissegalo/KBTS3AudioBot
+
+## Supported URL Schemas
+
+- BiliBili `https://www.bilibili.com/video/*`, `https://b23.tv/*`
+
+
 ## Build status
 
 ![Build and Release](https://img.shields.io/github/actions/workflow/status/scheissegalo/KBTS3AudioBot/dotnet.yml?branch=master&label=Build)
