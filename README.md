@@ -7,6 +7,8 @@ This is a hard fork of https://github.com/scheissegalo/KBTS3AudioBot
 ## Supported URL Schemas
 
 - BiliBili `https://www.bilibili.com/video/*`, `https://b23.tv/*`
+- 163 Music `https://music.163.com/song?id=461544312`
+- SoundCloud `https://soundcloud.com/mystic-creations/the-mystic-mountain-edit`
 
 
 ## Build status
